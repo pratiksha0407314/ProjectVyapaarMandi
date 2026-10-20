@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   User,
@@ -11,7 +12,7 @@ import {
   Truck,
   MapPin,
   Car,
-  CreditCard
+  CreditCard,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import RoleSelector from "../components/RoleSelector";
@@ -27,23 +28,20 @@ function Register() {
     phone: "",
     password: "",
     confirmPassword: "",
-
     farmType: "",
     farmAddress: "",
-
     businessType: "",
     businessAddress: "",
-
     vehicleType: "",
     vehicleNo: "",
     licenseNo: "",
-    driverName: ""
+    driverName: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function handleRoleChange(role) {
     setSelectedRole(role);
@@ -51,17 +49,14 @@ function Register() {
 
     setFormData((previous) => ({
       ...previous,
-
       farmType: "",
       farmAddress: "",
-
       businessType: "",
       businessAddress: "",
-
       vehicleType: "",
       vehicleNo: "",
       licenseNo: "",
-      driverName: ""
+      driverName: "",
     }));
   }
 
@@ -70,16 +65,17 @@ function Register() {
 
     setFormData((previous) => ({
       ...previous,
-      [name]: value
+      [name]: value,
     }));
 
     setMessage("");
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-
     setMessage("");
+
+    if (loading) return;
 
     if (!selectedRole) {
       setMessage("Please select your role first.");
@@ -101,8 +97,18 @@ function Register() {
       return;
     }
 
+    if (!/^[+]?[0-9\s()-]{10,20}$/.test(formData.phone.trim())) {
+      setMessage("Please enter a valid phone number.");
+      return;
+    }
+
     if (!formData.password) {
       setMessage("Please enter your password.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setMessage("Password must be at least 8 characters long.");
       return;
     }
 
@@ -162,92 +168,103 @@ function Register() {
       }
     }
 
-    const userId =
-      selectedRole.toUpperCase() + "-" + Date.now();
-
-    const registeredUser = {
-      user_id: userId,
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
+    const registrationData = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
       role: selectedRole,
-      language: "English",
-      status: "Active",
-      created_at: new Date().toISOString()
+      phone: formData.phone.trim(),
+
+      ...(selectedRole === "farmer" && {
+        farmType: formData.farmType.trim(),
+        farmAddress: formData.farmAddress.trim(),
+      }),
+
+      ...(selectedRole === "vendor" && {
+        businessType: formData.businessType.trim(),
+        businessAddress: formData.businessAddress.trim(),
+      }),
+
+      ...(selectedRole === "transporter" && {
+        vehicleType: formData.vehicleType.trim(),
+        vehicleNo: formData.vehicleNo.trim(),
+        licenseNo: formData.licenseNo.trim(),
+        driverName: formData.driverName.trim(),
+      }),
     };
 
-    if (selectedRole === "farmer") {
-      registeredUser.farmer = {
-        farm_type: formData.farmType,
-        farm_address: formData.farmAddress
-      };
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(registrationData),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Registration failed.");
+      }
+
+      setMessage(
+        "Account created successfully! Redirecting to login..."
+      );
+
+      setTimeout(() => {
+        navigate("/");
+      }, 1200);
+    } catch (error) {
+      setMessage(
+        error.message === "Failed to fetch"
+          ? "Unable to connect to the backend. Please check that the server is running on port 5000."
+          : error.message
+      );
+    } finally {
+      setLoading(false);
     }
-
-    if (selectedRole === "vendor") {
-      registeredUser.vendor = {
-        business_type: formData.businessType,
-        business_address: formData.businessAddress
-      };
-    }
-
-    if (selectedRole === "transporter") {
-      registeredUser.transporter = {
-        vehicle_type: formData.vehicleType,
-        vehicle_no: formData.vehicleNo,
-        license_no: formData.licenseNo,
-        availability: true,
-        driver_name: formData.driverName
-      };
-    }
-
-    localStorage.setItem(
-      "registeredUser",
-      JSON.stringify(registeredUser)
-    );
-
-    navigate("/");
   }
 
   return (
     <main className="register-page">
-
       <div className="register-background"></div>
-
       <div className="register-overlay"></div>
 
       <div className="register-content">
-
         <section className="register-card">
-
           {/* Heading */}
           <div className="register-heading">
-
             <div className="register-icon">
               <User size={24} />
             </div>
 
             <div>
               <h1>Create Account</h1>
-
-              <p>
-                Register to join VyapaarMandi.
-              </p>
+              <p>Register to join VyapaarMandi.</p>
             </div>
-
           </div>
 
           <div className="card-divider"></div>
 
           {/* Message */}
           {message && (
-            <div className="form-message">
+            <div
+              className="form-message"
+              role="status"
+              aria-live="polite"
+            >
               {message}
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-
-            {/* ROLE SELECTION */}
+            {/* Role Selection */}
             <RoleSelector
               selectedRole={selectedRole}
               onSelect={handleRoleChange}
@@ -256,27 +273,19 @@ function Register() {
 
             {selectedRole && (
               <>
-                {/* YOUR DETAILS */}
                 <div className="register-role-title">
                   Your Details
                 </div>
 
-                {/* ALL DETAILS IN ONE TWO-COLUMN GRID */}
                 <div className="register-grid">
-
-                  {/* FULL NAME */}
+                  {/* Full Name */}
                   <div className="form-group">
-
                     <label htmlFor="register-name">
                       Full Name
                     </label>
 
                     <div className="input-wrapper">
-
-                      <User
-                        size={18}
-                        className="input-icon"
-                      />
+                      <User size={18} className="input-icon" />
 
                       <input
                         id="register-name"
@@ -285,25 +294,20 @@ function Register() {
                         placeholder="Enter your full name"
                         value={formData.name}
                         onChange={handleChange}
+                        autoComplete="name"
+                        required
                       />
-
                     </div>
-
                   </div>
 
-                  {/* EMAIL */}
+                  {/* Email */}
                   <div className="form-group">
-
                     <label htmlFor="register-email">
                       Email Address
                     </label>
 
                     <div className="input-wrapper">
-
-                      <Mail
-                        size={18}
-                        className="input-icon"
-                      />
+                      <Mail size={18} className="input-icon" />
 
                       <input
                         id="register-email"
@@ -312,25 +316,20 @@ function Register() {
                         placeholder="Enter your email"
                         value={formData.email}
                         onChange={handleChange}
+                        autoComplete="email"
+                        required
                       />
-
                     </div>
-
                   </div>
 
-                  {/* PHONE */}
+                  {/* Phone */}
                   <div className="form-group">
-
                     <label htmlFor="register-phone">
                       Phone Number
                     </label>
 
                     <div className="input-wrapper">
-
-                      <Phone
-                        size={18}
-                        className="input-icon"
-                      />
+                      <Phone size={18} className="input-icon" />
 
                       <input
                         id="register-phone"
@@ -339,30 +338,22 @@ function Register() {
                         placeholder="Enter your phone number"
                         value={formData.phone}
                         onChange={handleChange}
+                        autoComplete="tel"
+                        required
                       />
-
                     </div>
-
                   </div>
 
-                  {/* ================= FARMER ================= */}
-
+                  {/* Farmer Fields */}
                   {selectedRole === "farmer" && (
                     <>
-
-                      {/* FARM TYPE */}
                       <div className="form-group">
-
                         <label htmlFor="farm-type">
                           Farm Type
                         </label>
 
                         <div className="input-wrapper">
-
-                          <Sprout
-                            size={18}
-                            className="input-icon"
-                          />
+                          <Sprout size={18} className="input-icon" />
 
                           <input
                             id="farm-type"
@@ -371,25 +362,18 @@ function Register() {
                             placeholder="e.g. Organic, Dairy, Mixed"
                             value={formData.farmType}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
 
-                      {/* FARM ADDRESS */}
                       <div className="form-group">
-
                         <label htmlFor="farm-address">
                           Farm Address
                         </label>
 
                         <div className="input-wrapper">
-
-                          <MapPin
-                            size={18}
-                            className="input-icon"
-                          />
+                          <MapPin size={18} className="input-icon" />
 
                           <input
                             id="farm-address"
@@ -398,33 +382,23 @@ function Register() {
                             placeholder="Enter your farm address"
                             value={formData.farmAddress}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
-
                     </>
                   )}
 
-                  {/* ================= VENDOR ================= */}
-
+                  {/* Vendor Fields */}
                   {selectedRole === "vendor" && (
                     <>
-
-                      {/* BUSINESS TYPE */}
                       <div className="form-group">
-
                         <label htmlFor="business-type">
                           Business Type
                         </label>
 
                         <div className="input-wrapper">
-
-                          <Store
-                            size={18}
-                            className="input-icon"
-                          />
+                          <Store size={18} className="input-icon" />
 
                           <input
                             id="business-type"
@@ -433,25 +407,18 @@ function Register() {
                             placeholder="e.g. Retailer, Wholesaler"
                             value={formData.businessType}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
 
-                      {/* BUSINESS ADDRESS */}
                       <div className="form-group">
-
                         <label htmlFor="business-address">
                           Business Address
                         </label>
 
                         <div className="input-wrapper">
-
-                          <MapPin
-                            size={18}
-                            className="input-icon"
-                          />
+                          <MapPin size={18} className="input-icon" />
 
                           <input
                             id="business-address"
@@ -460,33 +427,23 @@ function Register() {
                             placeholder="Enter your business address"
                             value={formData.businessAddress}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
-
                     </>
                   )}
 
-                  {/* ================= TRANSPORTER ================= */}
-
+                  {/* Transporter Fields */}
                   {selectedRole === "transporter" && (
                     <>
-
-                      {/* VEHICLE TYPE */}
                       <div className="form-group">
-
                         <label htmlFor="vehicle-type">
                           Vehicle Type
                         </label>
 
                         <div className="input-wrapper">
-
-                          <Truck
-                            size={18}
-                            className="input-icon"
-                          />
+                          <Truck size={18} className="input-icon" />
 
                           <input
                             id="vehicle-type"
@@ -495,25 +452,18 @@ function Register() {
                             placeholder="e.g. Truck, Mini Truck"
                             value={formData.vehicleType}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
 
-                      {/* VEHICLE NUMBER */}
                       <div className="form-group">
-
                         <label htmlFor="vehicle-no">
                           Vehicle Number
                         </label>
 
                         <div className="input-wrapper">
-
-                          <Car
-                            size={18}
-                            className="input-icon"
-                          />
+                          <Car size={18} className="input-icon" />
 
                           <input
                             id="vehicle-no"
@@ -522,21 +472,17 @@ function Register() {
                             placeholder="Enter vehicle number"
                             value={formData.vehicleNo}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
 
-                      {/* LICENSE NUMBER */}
                       <div className="form-group">
-
                         <label htmlFor="license-no">
                           License Number
                         </label>
 
                         <div className="input-wrapper">
-
                           <CreditCard
                             size={18}
                             className="input-icon"
@@ -549,25 +495,18 @@ function Register() {
                             placeholder="Enter license number"
                             value={formData.licenseNo}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
 
-                      {/* DRIVER NAME */}
                       <div className="form-group">
-
                         <label htmlFor="driver-name">
                           Driver Name
                         </label>
 
                         <div className="input-wrapper">
-
-                          <User
-                            size={18}
-                            className="input-icon"
-                          />
+                          <User size={18} className="input-icon" />
 
                           <input
                             id="driver-name"
@@ -576,47 +515,44 @@ function Register() {
                             placeholder="Enter driver's name"
                             value={formData.driverName}
                             onChange={handleChange}
+                            required
                           />
-
                         </div>
-
                       </div>
-
                     </>
                   )}
 
-                  {/* PASSWORD */}
+                  {/* Password */}
                   <div className="form-group">
-
                     <label htmlFor="register-password">
                       Password
                     </label>
 
                     <div className="input-wrapper">
-
-                      <Lock
-                        size={18}
-                        className="input-icon"
-                      />
+                      <Lock size={18} className="input-icon" />
 
                       <input
                         id="register-password"
                         name="password"
-                        type={
-                          showPassword
-                            ? "text"
-                            : "password"
-                        }
+                        type={showPassword ? "text" : "password"}
                         placeholder="Create a password"
                         value={formData.password}
                         onChange={handleChange}
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
                       />
 
                       <button
                         type="button"
                         className="password-toggle"
+                        aria-label={
+                          showPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
                         onClick={() =>
-                          setShowPassword(!showPassword)
+                          setShowPassword((previous) => !previous)
                         }
                       >
                         {showPassword ? (
@@ -625,44 +561,42 @@ function Register() {
                           <Eye size={18} />
                         )}
                       </button>
-
                     </div>
-
                   </div>
 
-                  {/* CONFIRM PASSWORD */}
+                  {/* Confirm Password */}
                   <div className="form-group">
-
                     <label htmlFor="confirm-password">
                       Confirm Password
                     </label>
 
                     <div className="input-wrapper">
-
-                      <Lock
-                        size={18}
-                        className="input-icon"
-                      />
+                      <Lock size={18} className="input-icon" />
 
                       <input
                         id="confirm-password"
                         name="confirmPassword"
                         type={
-                          showConfirmPassword
-                            ? "text"
-                            : "password"
+                          showConfirmPassword ? "text" : "password"
                         }
                         placeholder="Confirm your password"
                         value={formData.confirmPassword}
                         onChange={handleChange}
+                        autoComplete="new-password"
+                        required
                       />
 
                       <button
                         type="button"
                         className="password-toggle"
+                        aria-label={
+                          showConfirmPassword
+                            ? "Hide confirm password"
+                            : "Show confirm password"
+                        }
                         onClick={() =>
                           setShowConfirmPassword(
-                            !showConfirmPassword
+                            (previous) => !previous
                           )
                         }
                       >
@@ -672,46 +606,32 @@ function Register() {
                           <Eye size={18} />
                         )}
                       </button>
-
                     </div>
-
                   </div>
-
                 </div>
 
-                {/* CREATE ACCOUNT */}
+                {/* Create Account */}
                 <button
                   type="submit"
                   className="register-button"
+                  disabled={loading}
                 >
-                  Create Account
+                  {loading ? "Creating Account..." : "Create Account"}
                 </button>
 
-                {/* SIGN IN */}
+                {/* Sign In */}
                 <div className="login-link-area">
+                  <span>Already have an account?</span>
 
-                  <span>
-                    Already have an account?
-                  </span>
-
-                  <Link
-                    to="/"
-                    className="signin-link"
-                  >
+                  <Link to="/" className="signin-link">
                     Sign In
                   </Link>
-
                 </div>
-
               </>
             )}
-
           </form>
-
         </section>
-
       </div>
-
     </main>
   );
 }
