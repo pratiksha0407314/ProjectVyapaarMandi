@@ -1,10 +1,29 @@
-
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+
+const allowedRoles = ["farmer", "vendor", "transporter"];
+
+function publicUser(user) {
+  return {
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    ...(user.role === "farmer"
+      ? {
+          farmerId: user.farmerId,
+          farmType: user.farmType,
+          farmAddress: user.farmAddress,
+        }
+      : {}),
+  };
+}
 
 // REGISTER
 router.post("/register", async (req, res) => {
@@ -25,13 +44,19 @@ router.post("/register", async (req, res) => {
       driverName,
     } = req.body;
 
-    if (!name || !email || !password || !role || !phone) {
+    if (
+      !name?.trim() ||
+      !email?.trim() ||
+      !password ||
+      !role ||
+      !phone?.trim()
+    ) {
       return res.status(400).json({
         message: "Please fill in all required fields.",
       });
     }
 
-    if (!["farmer", "vendor", "transporter"].includes(role)) {
+    if (!allowedRoles.includes(role)) {
       return res.status(400).json({
         message: "Invalid role selected.",
       });
@@ -43,13 +68,16 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    if (role === "farmer" && (!farmType || !farmAddress)) {
+    if (role === "farmer" && (!farmType?.trim() || !farmAddress?.trim())) {
       return res.status(400).json({
         message: "Please provide your farm details.",
       });
     }
 
-    if (role === "vendor" && (!businessType || !businessAddress)) {
+    if (
+      role === "vendor" &&
+      (!businessType?.trim() || !businessAddress?.trim())
+    ) {
       return res.status(400).json({
         message: "Please provide your business details.",
       });
@@ -57,7 +85,10 @@ router.post("/register", async (req, res) => {
 
     if (
       role === "transporter" &&
-      (!vehicleType || !vehicleNo || !licenseNo || !driverName)
+      (!vehicleType?.trim() ||
+        !vehicleNo?.trim() ||
+        !licenseNo?.trim() ||
+        !driverName?.trim())
     ) {
       return res.status(400).json({
         message: "Please provide all transporter details.",
@@ -96,15 +127,10 @@ router.post("/register", async (req, res) => {
 
     return res.status(201).json({
       message: "Account created successfully.",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: publicUser(user),
     });
   } catch (error) {
-    console.error("Registration error:", error.message);
+    console.error("REGISTRATION ERROR DETAILS:", error);
 
     if (error.code === 11000) {
       return res.status(409).json({
@@ -123,15 +149,32 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    if (!email || !password || !role) {
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password ||
+      typeof role !== "string" ||
+      !role
+    ) {
       return res.status(400).json({
         message: "Email, password, and role are required.",
       });
     }
 
-    if (!["farmer", "vendor", "transporter"].includes(role)) {
+    if (!allowedRoles.includes(role)) {
       return res.status(400).json({
         message: "Invalid role selected.",
+      });
+    }
+
+    if (!process.env.JWT_SECRET?.trim()) {
+      console.error(
+        "LOGIN CONFIGURATION ERROR: JWT_SECRET is missing or empty."
+      );
+
+      return res.status(500).json({
+        message: "Server authentication configuration is missing.",
       });
     }
 
@@ -142,6 +185,16 @@ router.post("/login", async (req, res) => {
     if (!user) {
       return res.status(401).json({
         message: "Invalid email or password.",
+      });
+    }
+
+    if (!user.password) {
+      console.error(
+        "LOGIN DATA ERROR: The account has no readable password hash."
+      );
+
+      return res.status(500).json({
+        message: "Unable to verify this account. Please contact support.",
       });
     }
 
@@ -162,10 +215,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is missing from the environment.");
-    }
-
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -178,19 +227,36 @@ router.post("/login", async (req, res) => {
     return res.status(200).json({
       message: "Login successful.",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
+      user: publicUser(user),
     });
   } catch (error) {
-    console.error("Login error:", error.message);
+    console.error("LOGIN ERROR DETAILS:", error);
 
     return res.status(500).json({
       message: "Login failed. Please try again.",
+    });
+  }
+});
+
+// GET THE ACTUAL LOGGED-IN USER
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User account not found.",
+      });
+    }
+
+    return res.status(200).json({
+      user: publicUser(user),
+    });
+  } catch (error) {
+    console.error("FETCH PROFILE ERROR DETAILS:", error);
+
+    return res.status(500).json({
+      message: "Unable to load your profile.",
     });
   }
 });

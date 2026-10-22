@@ -2,8 +2,13 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.js";
+import cropRoutes from "./routes/crops.js";
+
+console.log("Environment file check:", process.cwd());
+console.log("JWT_SECRET loaded:", Boolean(process.env.JWT_SECRET));
 
 const app = express();
 
@@ -11,17 +16,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Home route
+// Test route
 app.get("/", (req, res) => {
   res.send("Vyapaar Mandi backend is running");
 });
 
-// Authentication routes: register and login
+// API routes
 app.use("/api/auth", authRoutes);
+app.use("/api/crops", cropRoutes);
 
-// Start server after connecting to MongoDB
+// Start server after database connection
 const startServer = async () => {
   try {
+    console.log("Connecting to MongoDB Atlas...");
+
     await connectDB();
 
     const port = process.env.PORT || 5000;
@@ -30,7 +38,11 @@ const startServer = async () => {
       console.log(`Server running on port ${port}`);
     });
   } catch (error) {
-    console.error("Server startup failed:", error.message);
+    console.error(
+      "MongoDB connection or server startup failed:",
+      error.message
+    );
+
     process.exit(1);
   }
 };
